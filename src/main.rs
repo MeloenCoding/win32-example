@@ -6,20 +6,11 @@ mod window;
 fn main() {
     // create a new window with name "Test". See window.rs for more info
     let mut window = Window::new(s!("Test"), CS_OWNDC);
-    let mut window2 = Window::new(s!("Test2"), CS_OWNDC);
     // show the window you've created
     window.show_window(); 
-    window2.show_window(); 
 
     loop {
         match window.handle_message() {
-            Some(_) => {
-                // when getMessage = 0 (exit without an error) | -1 (exit with an error)
-                break;
-            },
-            None => {/* do nothing and continue the loop */},
-        }
-        match window2.handle_message() {
             Some(_) => {
                 // when getMessage = 0 (exit without an error) | -1 (exit with an error)
                 break;
@@ -30,5 +21,4 @@ fn main() {
 
     // print the exit codes
     window.get_exit_codes();
-    window2.get_exit_codes();
 }
