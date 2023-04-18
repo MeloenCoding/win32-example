@@ -1,7 +1,5 @@
 use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError, WIN32_ERROR, SetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER, FORMAT_MESSAGE_IGNORE_INSERTS, FormatMessageW}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR, PWSTR}, imp::heap_free};
 
-
-
 pub struct Window {
     pub instance: HINSTANCE,
     pub class_name: PCSTR,
@@ -21,7 +19,8 @@ impl Window {
                 hInstance is the handle to an instance or handle to a module. The 
                 operating system uses this value to identify the executable or EXE 
                 when it's loaded in memory.
-             */
+            */
+
             GetModuleHandleA(None).unwrap_or_else(|_| {
                 panic!("unable to get module handle")
             }) 
@@ -34,6 +33,7 @@ impl Window {
                 For more info about the fields of this class: 
                 https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassexa
             */
+
             cbSize: std::mem::size_of::<WNDCLASSEXA>() as u32,
             style,
             lpfnWndProc: Some(Self::wndproc),
@@ -60,7 +60,8 @@ impl Window {
                 registered. If the function fails, the return value is zero.
 
                 more info: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerclassexa
-             */
+            */
+
             RegisterClassExA(&class) 
         };
 
@@ -78,7 +79,8 @@ impl Window {
                 return value is NULL. We can get the error info by calling GetLastError. See GetExitCodes().
 
                 More info: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowexa
-             */
+            */
+
             CreateWindowExA(windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
             class_name, class_name, 
             WS_CAPTION | WS_MINIMIZEBOX | WS_SYSMENU,
@@ -107,7 +109,8 @@ impl Window {
 
             Else translate and dispatch the message. Like i said in the beginning, watch the video, it really 
             makes things clear.
-         */
+        */
+
         let get_result: BOOL = unsafe { GetMessageA(&mut self.msg_buffer, None, 0, 0) };
         if !(get_result.0 > 0) {
             self.last_result = get_result;
@@ -121,7 +124,7 @@ impl Window {
     
     pub fn get_exit_codes(&self) {
         /*
-        Computate the WIN32_ERROR to the description of the error. For more info check: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes
+            Computate the WIN32_ERROR to the description of the error. For more info check: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes
         */
         
         // To test this function you could uncomment this piece of code and see what it returns.
@@ -148,7 +151,8 @@ impl Window {
                     sequences if requested.
 
                     For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage
-                 */   
+                */
+
                 FORMAT_MESSAGE_FROM_SYSTEM | // Use system message tables to retrieve error text
                 FORMAT_MESSAGE_ALLOCATE_BUFFER, // Allocate buffer on local heap for error text
                 None, // Location of the message definition. We use the systems error table so it has to be None
@@ -159,7 +163,8 @@ impl Window {
                     function it says we need an LANGID but there is nothing like that in the windows crate. This crate uses a LCID. 
                     0 means that it will use your system languague. 1033 means US. 
                     For more info see: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/70feba9f-294e-491e-b6eb-56532684c37f
-                 */
+                */
+
                 PSTR(&mut err_buffer as *mut _ as *mut _), // Man... this took me ages to get working. ->
                 /*
                     A pointer to a buffer that receives the null-terminated string that specifies the formatted message.
@@ -172,17 +177,19 @@ impl Window {
                         PSTR();
                     Then we put in a mutable reference to the error_buffer and cast it to an mutable pointer (I have no clue how and why this works)
                         PSTR(&mut err_buffer as *mut _ as *mut _);
-                 */
+                */
+
                 0, 
                 /*
                     If the FORMAT_MESSAGE_ALLOCATE_BUFFER flag is not set, this parameter specifies the size of the output buffer, in TCHARs. If 
                     FORMAT_MESSAGE_ALLOCATE_BUFFER is set, this parameter specifies the minimum number of TCHARs to allocate for an output buffer.
-                 */
+                */
+
                 None 
                 /*
                     An array of values that are used as insert values in the formatted message.
                     For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage#parameters
-                 */
+                */
             )
         };
 
@@ -190,7 +197,7 @@ impl Window {
         if err_msg_lenght == 0 { // If the message buffer is empty, there is no available error description
             /*
                 Could be caused by an invalid error code or an invalid or not correctly installed LCID
-             */
+            */
             return println!("Unable to find error description. Errorcode: {}", err_code);
         }
 
@@ -210,7 +217,7 @@ impl Window {
 
             For more info about wndproc see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nc-winuser-wndproc
             And for a list with all the messages see: https://wiki.winehq.org/List_Of_Windows_Messages 
-         */
+        */
         
         unsafe {
             match message {
