@@ -1,5 +1,5 @@
 # win32-boilerplate
-A boilerplate project for the win32 crate.
+A boilerplate project for the win32 crate. Fully documented with good references and usefull links.
 
 ## Usefull documentation i've used
 - https://youtube.com/playlist?list=PLqCJpWy5Fohd3S7ICFXwUomYW0Wv67pDD (*)
