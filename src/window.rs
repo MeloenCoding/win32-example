@@ -1,5 +1,7 @@
-use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError, WIN32_ERROR, SetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER, FORMAT_MESSAGE_IGNORE_INSERTS, FormatMessageW}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR, PWSTR}, imp::heap_free};
+use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
+use crate::{error, loc};
 
+#[derive(Debug)]
 pub struct Window {
     pub instance: HINSTANCE,
     pub class_name: PCSTR,
@@ -10,9 +12,28 @@ pub struct Window {
     last_result: BOOL
 }
 
+pub fn create_message_box(lptext: PCSTR, utype: MESSAGEBOX_STYLE, wlanguageid: u16 ) -> MESSAGEBOX_RESULT {
+    let lpcaption: PCSTR = match utype {
+        MESSAGEBOX_STYLE(16) => {
+            s!("Fatal error")
+        },
+        _ => {
+            s!("Warning")
+        }
+    };
+    
+    return unsafe { MessageBoxExA(HWND::default(), lptext, lpcaption, utype, wlanguageid) };
+    /*
+        Creates, displays, and operates a message box. The message box contains an application-defined message and title, plus any 
+        combination of predefined icons and push buttons. The buttons are in the language of the system user interface.
+
+        For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messageboxexa
+    */
+}
+
 impl Window {
     pub fn new(class_name: PCSTR, style: WNDCLASS_STYLES) -> Window {
-        let class_name: PCSTR = class_name; // id of the program
+        let class_name: PCSTR = class_name; // ID of the program
         
         let instance: HINSTANCE = unsafe { 
             /* 
@@ -22,8 +43,8 @@ impl Window {
             */
 
             GetModuleHandleA(None).unwrap_or_else(|_| {
-                panic!("unable to get module handle")
-            }) 
+                error::WindowError::new("Unable to create an hInstance with GetModuleHandle.", None, loc!());
+            })
         };
 
         let class: WNDCLASSEXA = WNDCLASSEXA { 
@@ -39,7 +60,7 @@ impl Window {
             lpfnWndProc: Some(Self::wndproc),
             hInstance: instance,
             hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_else(|_| {
-                panic!("unable to load cursor")
+                error::WindowError::new("Unable to load cursor.", None, loc!());
             }) },
             lpszClassName: class_name,
             cbClsExtra: 0,
@@ -59,7 +80,7 @@ impl Window {
                 If the function succeeds, the return value is a class atom that uniquely identifies the class being 
                 registered. If the function fails, the return value is zero.
 
-                more info: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerclassexa
+                For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerclassexa
             */
 
             RegisterClassExA(&class) 
@@ -78,7 +99,7 @@ impl Window {
                 If the function succeeds, the return value is a handle to the new window. If the function fails, the 
                 return value is NULL. We can get the error info by calling GetLastError. See GetExitCodes().
 
-                More info: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowexa
+                For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowexa
             */
 
             CreateWindowExA(windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
@@ -191,16 +212,17 @@ impl Window {
                     For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage#parameters
                 */
             )
+
         };
-
-
+        
         if err_msg_lenght == 0 { // If the message buffer is empty, there is no available error description
             /*
                 Could be caused by an invalid error code or an invalid or not correctly installed LCID
             */
+
             return println!("Unable to find error description. Errorcode: {}", err_code);
         }
-
+        
         // If there is an error, print all the return codes,
         println!("Unsuccesfull exit with codes getResult: {:?}, wParam: {}, lastError: {}", self.last_result.0, self.msg_buffer.wParam.0, unsafe { GetLastError().0 });
         // and print out the description of the code
@@ -208,6 +230,8 @@ impl Window {
         return println!("Errorcode {}: {:?}", err_code, String::from_utf8(slice).unwrap());
 
     }
+
+    
 
     extern "system" fn wndproc(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         /*
