@@ -1,7 +1,11 @@
-use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
-use crate::{error, loc};
+use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_SYSCHAR}, Input::KeyboardAndMouse::{ToUnicode, ToAscii}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
+use crate::{loc};
 
-#[derive(Debug)]
+mod error;
+mod mouse;
+mod keyboard;
+mod message;
+
 pub struct Window {
     pub instance: HINSTANCE,
     pub class_name: PCSTR,
@@ -9,7 +13,8 @@ pub struct Window {
     pub class: WNDCLASSEXA,
     pub hwnd: HWND,
     pub msg_buffer: MSG,
-    last_result: BOOL
+    pub last_result: BOOL,
+    pub keyboard: keyboard::Keyboard
 }
 
 pub fn create_message_box(lptext: PCSTR, utype: MESSAGEBOX_STYLE, wlanguageid: u16 ) -> MESSAGEBOX_RESULT {
@@ -109,7 +114,7 @@ impl Window {
             None, None, instance, None) 
         };
         // return the new Window instance
-        Window { instance, class_name, atom, class, hwnd, msg_buffer: MSG::default(), last_result: BOOL::default() }
+        Window { instance, class_name, atom, class, hwnd, msg_buffer: MSG::default(), last_result: BOOL::default(), keyboard: keyboard::Keyboard::new() }
 
     }
 
@@ -142,7 +147,51 @@ impl Window {
         unsafe { DispatchMessageA(&mut self.msg_buffer) };
         None
     }
-    
+
+    extern "system" fn wndproc(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        /*
+            It is very hard to explain how this works without typing a lot of text so i'll just refer you to
+            the great video by ChiliTomatoNoodle (https://youtu.be/UUbXK4G_NCM). It explains how the window
+            messages work and how to build a good system around it. 
+
+            For more info about wndproc see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nc-winuser-wndproc
+            And for a list with all the messages see: https://wiki.winehq.org/List_Of_Windows_Messages 
+        */
+        
+        unsafe {
+            match message {
+                WM_CLOSE => {
+                    println!("WM_CLOSE");
+                    DestroyWindow(hwnd);
+                    LRESULT(0)
+                },
+                WM_DESTROY => {
+                    println!("WM_DESTROY");
+                    PostQuitMessage(69);
+                    LRESULT(0)   
+                },
+                WM_KEYDOWN | WM_SYSKEYDOWN  => {
+                    println!("{}: {:?}", crate::window::message::id_to_name(message), wparam.0);
+                    LRESULT(0)
+                },
+                WM_CHAR | WM_KEYUP => {
+                    let key: char = char::from_u32(wparam.0 as u32).unwrap_or_else(|| {
+                        error::WindowError::new("Unable to convert u32 char to normal char.", None, loc!());
+                    });
+
+                    println!("char {key}");
+                    println!("{}: {:?}", crate::window::message::id_to_name(message), wparam.0);
+
+                    LRESULT(0)
+                },
+                _ => {
+                    // println!("{}: {:?}", crate::window::message::id_to_name(message), wparam.0);
+                    DefWindowProcA(hwnd, message, wparam, lparam)
+                }
+            }
+        }
+    }
+
     pub fn get_exit_codes(&self) {
         /*
             Computate the WIN32_ERROR to the description of the error. For more info check: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes
@@ -170,10 +219,10 @@ impl Window {
                     a message identifier (HRESULT/GetLastError()) and a language identifier (LCID). The function copies the 
                     formatted message text to an output buffer, processing any embedded insert 
                     sequences if requested.
-
+                    
                     For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage
                 */
-
+                
                 FORMAT_MESSAGE_FROM_SYSTEM | // Use system message tables to retrieve error text
                 FORMAT_MESSAGE_ALLOCATE_BUFFER, // Allocate buffer on local heap for error text
                 None, // Location of the message definition. We use the systems error table so it has to be None
@@ -184,15 +233,15 @@ impl Window {
                     function it says we need an LANGID but there is nothing like that in the windows crate. This crate uses a LCID. 
                     0 means that it will use your system languague. 1033 means US. 
                     For more info see: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/70feba9f-294e-491e-b6eb-56532684c37f
-                */
+                    */
 
                 PSTR(&mut err_buffer as *mut _ as *mut _), // Man... this took me ages to get working. ->
                 /*
-                    A pointer to a buffer that receives the null-terminated string that specifies the formatted message.
+                A pointer to a buffer that receives the null-terminated string that specifies the formatted message.
                     This buffer cannot be larger than 64K bytes.
-                      ---
+                    ---
                     We first create a mutable null pointer and set the type to a u8 like this: 
-                        let mut err_buffer: *mut u8 = std::ptr::null_mut(); 
+                    let mut err_buffer: *mut u8 = std::ptr::null_mut(); 
                     Then we use the PSTR constructor to create a pointer to a null-terminated string of 8-bit Windows (ANSI) characters.
                     like this: 
                         PSTR();
@@ -204,22 +253,22 @@ impl Window {
                 /*
                     If the FORMAT_MESSAGE_ALLOCATE_BUFFER flag is not set, this parameter specifies the size of the output buffer, in TCHARs. If 
                     FORMAT_MESSAGE_ALLOCATE_BUFFER is set, this parameter specifies the minimum number of TCHARs to allocate for an output buffer.
-                */
-
+                    */
+                    
                 None 
                 /*
                     An array of values that are used as insert values in the formatted message.
                     For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage#parameters
                 */
             )
-
+            
         };
         
         if err_msg_lenght == 0 { // If the message buffer is empty, there is no available error description
             /*
                 Could be caused by an invalid error code or an invalid or not correctly installed LCID
             */
-
+            
             return println!("Unable to find error description. Errorcode: {}", err_code);
         }
         
@@ -227,38 +276,9 @@ impl Window {
         println!("Unsuccesfull exit with codes getResult: {:?}, wParam: {}, lastError: {}", self.last_result.0, self.msg_buffer.wParam.0, unsafe { GetLastError().0 });
         // and print out the description of the code
         let slice = unsafe { std::slice::from_raw_parts(err_buffer, (err_msg_lenght - 2) as _).to_vec()};
-        return println!("Errorcode {}: {:?}", err_code, String::from_utf8(slice).unwrap());
-
-    }
-
-    
-
-    extern "system" fn wndproc(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        /*
-            It is very hard to explain how this works without typing a lot of text so i'll just refer you to
-            the great video by ChiliTomatoNoodle (https://youtu.be/UUbXK4G_NCM). It explains how the window
-            messages work and how to build a good system around it. 
-
-            For more info about wndproc see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nc-winuser-wndproc
-            And for a list with all the messages see: https://wiki.winehq.org/List_Of_Windows_Messages 
-        */
         
-        unsafe {
-            match message {
-                WM_CLOSE => {
-                    println!("WM_CLOSE");
-                    DestroyWindow(hwnd);
-                    LRESULT(0)
-                },
-                WM_DESTROY => {
-                    println!("WM_DESTROY");
-                    PostQuitMessage(69);
-                    LRESULT(0)
-                },
-                _ => {
-                    DefWindowProcA(hwnd, message, wparam, lparam)
-                },
-            }
-        }
+        return println!("Errorcode {}: {:?}", err_code, String::from_utf8(slice).unwrap());
+        
     }
+
 }

@@ -2,7 +2,6 @@ use windows::{Win32::{UI::{WindowsAndMessaging::{CS_OWNDC}}}, s};
 
 use crate::window::Window;
 mod window;
-mod error;
 
 fn main() {
     // If you want to test the custom error, just uncomment this:

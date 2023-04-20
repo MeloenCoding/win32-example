@@ -13,6 +13,13 @@ pub struct CallLocation {
     pub column: u32
 }
 
+#[macro_export] 
+macro_rules! loc {
+    () => {
+        crate::window::error::CallLocation { file: file!().to_string(), line: line!(), column: column!() }
+    }
+}
+
 impl WindowError {
     pub fn new(error_details: &str, error_code: Option<i32>, origin: CallLocation) -> ! {
         let base_details: String = format!("Error in {}:{}\nDescription: {}{}", origin.file, origin.line, error_details, '\0');
@@ -33,12 +40,5 @@ impl std::fmt::Display for WindowError {
 impl std::error::Error for WindowError {
     fn description(&self) -> &str {
         &self.details
-    }
-}
-
-#[macro_export] 
-macro_rules! loc {
-    () => {
-        crate::error::CallLocation { file: file!().to_string(), line: line!(), column: column!() }
     }
 }
