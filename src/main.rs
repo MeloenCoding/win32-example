@@ -1,11 +1,11 @@
+use window::Window;
 use windows::{Win32::{UI::{WindowsAndMessaging::{CS_OWNDC}}}, s};
 
-use crate::window::Window;
 mod window;
 
 fn main() {
     // If you want to test the custom error, just uncomment this:
-    // error::WindowError::new("Unable to load cursor.", None, loc!());
+    // window::error::WindowError::new("Unable to load cursor.", None, loc!());
 
     // create a new window with name "Test". See window.rs for more info
     let mut window: Window = Window::new(s!("Test"), CS_OWNDC);
