@@ -1,5 +1,4 @@
-struct Mouse {
-    x: u32,
-    y: u32,
-    
+pub struct Mouse {
+    pub x: u32,
+    pub y: u32,   
 }

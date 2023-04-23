@@ -1,12 +1,23 @@
-use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
-use crate::{loc};
+use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
+use crate::{loc, window::keyboard::KeyType};
+
+use self::keyboard::Keyboard;
 
 pub mod error;
 pub mod mouse;
 pub mod keyboard;
 pub mod message;
 
-pub struct Window {
+pub mod io {
+    // We need some public variables for the wndproc because we can't pass in any other arguments
+    use super::mouse::Mouse;
+    use super::keyboard::Keyboard;
+
+    pub static mut MOUSE: Mouse = Mouse { x: 0, y: 0 };
+    pub static mut KEYBOARD: Keyboard = Keyboard { key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, key_code: None, char_code: None};
+}
+
+pub struct Window<'a> {
     pub instance: HINSTANCE,
     pub class_name: PCSTR,
     pub atom: u16,
@@ -14,7 +25,8 @@ pub struct Window {
     pub hwnd: HWND,
     pub msg_buffer: MSG,
     pub last_result: BOOL,
-    pub keyboard: keyboard::Keyboard
+    pub keyboard: &'a Keyboard,
+    // pub mouse: &'a Mouse
 }
 
 pub fn create_message_box(lptext: PCSTR, utype: MESSAGEBOX_STYLE, wlanguageid: u16 ) -> MESSAGEBOX_RESULT {
@@ -36,8 +48,8 @@ pub fn create_message_box(lptext: PCSTR, utype: MESSAGEBOX_STYLE, wlanguageid: u
     */
 }
 
-impl Window {
-    pub fn new(class_name: PCSTR, style: WNDCLASS_STYLES) -> Window {
+impl Window<'_> {
+    pub fn new(class_name: PCSTR, style: WNDCLASS_STYLES) -> Window<'static> {
         let class_name: PCSTR = class_name; // ID of the program
         
         let instance: HINSTANCE = unsafe { 
@@ -114,7 +126,7 @@ impl Window {
             None, None, instance, None) 
         };
         // return the new Window instance
-        Window { instance, class_name, atom, class, hwnd, msg_buffer: MSG::default(), last_result: BOOL::default(), keyboard: keyboard::Keyboard::new() }
+        Window { instance, class_name, atom, class, hwnd, msg_buffer: MSG::default(), last_result: BOOL::default(), keyboard: unsafe { &io::KEYBOARD }}
 
     }
 
@@ -148,7 +160,7 @@ impl Window {
         None
     }
 
-    extern "system" fn wndproc(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         /*
             It is very hard to explain how this works without typing a lot of text so i'll just refer you to
             the great video by ChiliTomatoNoodle (https://youtu.be/UUbXK4G_NCM). It explains how the window
@@ -159,7 +171,7 @@ impl Window {
         */
         
         unsafe {
-            match message {
+            match msg {
                 WM_CLOSE => {
                     println!("WM_CLOSE");
                     DestroyWindow(hwnd);
@@ -170,23 +182,30 @@ impl Window {
                     PostQuitMessage(69);
                     LRESULT(0)   
                 },
-                WM_KEYDOWN | WM_SYSKEYDOWN  => {
-                    println!("{}: {:?}", crate::window::message::id_to_name(message), wparam.0);
+                WM_CHAR => {
+                    io::KEYBOARD.handle_char(wparam.0 as u32);
+                    println!("parsed char: {}", io::KEYBOARD.char_code_to_char(loc!()).unwrap());
                     LRESULT(0)
                 },
-                WM_CHAR | WM_KEYUP => {
-                    let key: char = char::from_u32(wparam.0 as u32).unwrap_or_else(|| {
-                        error::WindowError::new("Unable to convert u32 char to normal char.", None, loc!());
+                WM_KEYDOWN | WM_SYSKEYDOWN => {
+                    io::KEYBOARD.handle_key_down(wparam.0 as u32, match msg == WM_KEYDOWN {
+                        true => KeyType::Key,
+                        false => KeyType::SysKey
                     });
 
-                    println!("char {key}");
-                    println!("{}: {:?}", crate::window::message::id_to_name(message), wparam.0);
-
+                    println!("keydown: {:?}", io::KEYBOARD);
+                    
                     LRESULT(0)
                 },
+                WM_KEYUP | WM_SYSKEYUP => {
+                    io::KEYBOARD.handle_key_up();
+
+                    println!("keyup: {:?}\n", io::KEYBOARD);
+                    LRESULT(0)
+                }
                 _ => {
-                    // println!("{}: {:?}", crate::window::message::id_to_name(message), wparam.0);
-                    DefWindowProcA(hwnd, message, wparam, lparam)
+                    println!("{}: {:?}", crate::window::message::_id_to_name(msg), wparam.0);
+                    DefWindowProcA(hwnd, msg, wparam, lparam)
                 }
             }
         }

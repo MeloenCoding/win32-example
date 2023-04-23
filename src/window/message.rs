@@ -1,4 +1,4 @@
-pub fn id_to_name(id: u32) -> String {
+pub fn _id_to_name(id: u32) -> String {
     let map: std::collections::HashMap<u32, &str> = std::collections::hash_map::HashMap::from([
         ( 0, "WM_NUL"),
         ( 1, "WM_CREATE" ),
