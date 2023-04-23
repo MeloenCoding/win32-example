@@ -1,4 +1,4 @@
-# win32-boilerplate
+# win32-example
 A boilerplate project for the win32 crate. Fully documented with good references and usefull links.
 
 ## Usefull documentation i've used
