@@ -65,6 +65,7 @@ pub fn _id_to_name(id: u32) -> String {
         ( 83, "WM_HELP" ),
         ( 84, "WM_USERCHANGED" ),
         ( 85, "WM_NOTIFYFORMAT" ),
+        ( 96, "WM_MSG_CREATE"),
         ( 123, "WM_CONTEXTMENU" ),
         ( 124, "WM_STYLECHANGING" ),
         ( 125, "WM_STYLECHANGED" ),

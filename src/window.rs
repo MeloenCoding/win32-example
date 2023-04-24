@@ -1,4 +1,4 @@
-use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
+use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_KILLFOCUS}, Input::KeyboardAndMouse::VK_SPACE}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
 use crate::{loc, window::keyboard::KeyType};
 
 use self::keyboard::Keyboard;
@@ -9,12 +9,19 @@ pub mod keyboard;
 pub mod message;
 
 pub mod io {
-    // We need some public variables for the wndproc because we can't pass in any other arguments
+    // We need some public variables for the wndproc because we can't pass in any other arguments in that function
     use super::mouse::Mouse;
     use super::keyboard::Keyboard;
 
+    // static mut D: Vec<bool> = Vec::with_capacity(256);
+
     pub static mut MOUSE: Mouse = Mouse { x: 0, y: 0 };
-    pub static mut KEYBOARD: Keyboard = Keyboard { key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, key_code: None, char_code: None};
+    // pub static mut KEYBOARD: Keyboard = Keyboard { key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, key_code: None, char_code: None};
+    pub static mut KEYBOARD: Keyboard = Keyboard { 
+        key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, 
+        key_buffer: None, char_buffer: None, key_states: None, key_buffer2: None, 
+        char_buffer2: None, auto_repeat_enabled: false
+     };
 }
 
 pub struct Window<'a> {
@@ -125,6 +132,9 @@ impl Window<'_> {
             200, 200, 896, 672,
             None, None, instance, None) 
         };
+
+        unsafe { io::KEYBOARD.reset() };
+
         // return the new Window instance
         Window { instance, class_name, atom, class, hwnd, msg_buffer: MSG::default(), last_result: BOOL::default(), keyboard: unsafe { &io::KEYBOARD }}
 
@@ -136,7 +146,7 @@ impl Window<'_> {
         unsafe { ShowWindow(self.hwnd, windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD(1)); };
     }
 
-    pub fn handle_message(&mut self) -> Option<(MSG, i32)> {
+    pub fn handle_message(&mut self) -> Result<MSG, (MSG, i32)> {
         /*
             For info about this i really recommend the video of ChilliTomatoNoodle (https://youtu.be/Fx5bGZ3B_CI?t=152)
             to see how this function works. He explains it better then i ever could. It is in C++ tho.
@@ -152,12 +162,13 @@ impl Window<'_> {
         let get_result: BOOL = unsafe { GetMessageA(&mut self.msg_buffer, None, 0, 0) };
         if !(get_result.0 > 0) {
             self.last_result = get_result;
-            return Some((self.msg_buffer.to_owned(), get_result.0))
+            return Err((self.msg_buffer.to_owned(), get_result.0))
         }
         
         unsafe { TranslateMessage(&mut self.msg_buffer) };
         unsafe { DispatchMessageA(&mut self.msg_buffer) };
-        None
+
+        Ok(self.msg_buffer.to_owned())
     }
 
     extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -169,45 +180,52 @@ impl Window<'_> {
             For more info about wndproc see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nc-winuser-wndproc
             And for a list with all the messages see: https://wiki.winehq.org/List_Of_Windows_Messages 
         */
-        
+
+        let key_is_down = (lparam.0 & (1 << 31)) == 0;
+        let key_was_down = lparam.0 & (1 << 30) != 1;
+
         unsafe {
             match msg {
+                WM_KILLFOCUS => {
+                    io::KEYBOARD.clear();
+                    // LRESULT(0)
+                }
                 WM_CLOSE => {
                     println!("WM_CLOSE");
                     DestroyWindow(hwnd);
-                    LRESULT(0)
-                },
+                    // LRESULT(0)
+                }
                 WM_DESTROY => {
                     println!("WM_DESTROY");
                     PostQuitMessage(69);
-                    LRESULT(0)   
-                },
+                    // LRESULT(0)   
+                }
+
                 WM_CHAR => {
                     io::KEYBOARD.handle_char(wparam.0 as u32);
-                    println!("parsed char: {}", io::KEYBOARD.char_code_to_char(loc!()).unwrap());
-                    LRESULT(0)
-                },
+                    // println!("parsed char: {}", io::KEYBOARD.char_code_to_char(loc!()).unwrap_or(char::default()));
+                    // LRESULT(0)
+                }
                 WM_KEYDOWN | WM_SYSKEYDOWN => {
                     io::KEYBOARD.handle_key_down(wparam.0 as u32, match msg == WM_KEYDOWN {
                         true => KeyType::Key,
                         false => KeyType::SysKey
                     });
-
-                    println!("keydown: {:?}", io::KEYBOARD);
-                    
-                    LRESULT(0)
-                },
+                    // println!("keydown: {:?}", io::KEYBOARD);
+                    // LRESULT(0)
+                }
                 WM_KEYUP | WM_SYSKEYUP => {
                     io::KEYBOARD.handle_key_up();
-
-                    println!("keyup: {:?}\n", io::KEYBOARD);
-                    LRESULT(0)
+                    // println!("keyup: {:?}", io::KEYBOARD);
+                    // LRESULT(0)
                 }
                 _ => {
-                    println!("{}: {:?}", crate::window::message::_id_to_name(msg), wparam.0);
-                    DefWindowProcA(hwnd, msg, wparam, lparam)
+                    // println!("{}: {:?}", crate::window::message::_id_to_name(msg), wparam.0);
+                    return DefWindowProcA(hwnd, msg, wparam, lparam);
                 }
             }
+            // println!("{}: {:?}", crate::window::message::_id_to_name(msg), wparam.0);
+            LRESULT(0)
         }
     }
 
