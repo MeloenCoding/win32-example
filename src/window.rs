@@ -18,8 +18,9 @@ pub mod io {
     pub static mut MOUSE: Mouse = Mouse { x: 0, y: 0 };
     // pub static mut KEYBOARD: Keyboard = Keyboard { key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, key_code: None, char_code: None};
     pub static mut KEYBOARD: Keyboard = Keyboard { 
-        key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, 
-        key_buffer: None, char_buffer: None, key_states: None, key_buffer2: None, 
+        // key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, 
+        // key_buffer: None, char_buffer: None, 
+        key_states: None, key_buffer2: None, 
         char_buffer2: None, auto_repeat_enabled: false
      };
 }
@@ -32,7 +33,7 @@ pub struct Window<'a> {
     pub hwnd: HWND,
     pub msg_buffer: MSG,
     pub last_result: BOOL,
-    pub keyboard: &'a Keyboard,
+    pub keyboard: &'a mut Keyboard,
     // pub mouse: &'a Mouse
 }
 
@@ -136,7 +137,7 @@ impl Window<'_> {
         unsafe { io::KEYBOARD.reset() };
 
         // return the new Window instance
-        Window { instance, class_name, atom, class, hwnd, msg_buffer: MSG::default(), last_result: BOOL::default(), keyboard: unsafe { &io::KEYBOARD }}
+        Window { instance, class_name, atom, class, hwnd, msg_buffer: MSG::default(), last_result: BOOL::default(), keyboard: unsafe { &mut io::KEYBOARD }}
 
     }
 
@@ -181,13 +182,12 @@ impl Window<'_> {
             And for a list with all the messages see: https://wiki.winehq.org/List_Of_Windows_Messages 
         */
 
-        let key_is_down = (lparam.0 & (1 << 31)) == 0;
-        let key_was_down = lparam.0 & (1 << 30) != 1;
+        
 
         unsafe {
             match msg {
                 WM_KILLFOCUS => {
-                    io::KEYBOARD.clear();
+                    io::KEYBOARD.reset();
                     // LRESULT(0)
                 }
                 WM_CLOSE => {
@@ -202,20 +202,34 @@ impl Window<'_> {
                 }
 
                 WM_CHAR => {
-                    io::KEYBOARD.handle_char(wparam.0 as u32);
+                    // io::KEYBOARD.handle_char(wparam.0 as u32);
                     // println!("parsed char: {}", io::KEYBOARD.char_code_to_char(loc!()).unwrap_or(char::default()));
+
+                    io::KEYBOARD.on_char(wparam.0 as u32);
+
                     // LRESULT(0)
                 }
                 WM_KEYDOWN | WM_SYSKEYDOWN => {
-                    io::KEYBOARD.handle_key_down(wparam.0 as u32, match msg == WM_KEYDOWN {
-                        true => KeyType::Key,
-                        false => KeyType::SysKey
-                    });
+                    // io::KEYBOARD.handle_key_down(wparam.0 as u32, match msg == WM_KEYDOWN {
+                    //     true => KeyType::Key,
+                    //     false => KeyType::SysKey
+                    // });
+                    let key_is_down = lparam.0 & (1 << 31) == 0;
+                    let key_was_down = lparam.0 & (1 << 30) != 1;
+
+                    io::KEYBOARD.on_key_press(wparam.0 as u32);
+
                     // println!("keydown: {:?}", io::KEYBOARD);
                     // LRESULT(0)
                 }
                 WM_KEYUP | WM_SYSKEYUP => {
-                    io::KEYBOARD.handle_key_up();
+
+
+
+                    // io::KEYBOARD.handle_key_up();
+
+                    io::KEYBOARD.on_key_release(wparam.0 as u32);
+
                     // println!("keyup: {:?}", io::KEYBOARD);
                     // LRESULT(0)
                 }
