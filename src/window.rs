@@ -1,5 +1,5 @@
-use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_KILLFOCUS}, Input::KeyboardAndMouse::VK_SPACE}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
-use crate::{loc, window::keyboard::KeyType};
+use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_KILLFOCUS, KF_REPEAT}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
+use crate::{loc};
 
 use self::keyboard::Keyboard;
 
@@ -20,8 +20,8 @@ pub mod io {
     pub static mut KEYBOARD: Keyboard = Keyboard { 
         // key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, 
         // key_buffer: None, char_buffer: None, 
-        key_states: None, key_buffer2: None, 
-        char_buffer2: None, auto_repeat_enabled: false
+        key_states: None, key_buffer: None, 
+        char_buffer: None, auto_repeat_enabled: false
      };
 }
 
@@ -188,58 +188,46 @@ impl Window<'_> {
             match msg {
                 WM_KILLFOCUS => {
                     io::KEYBOARD.reset();
-                    // LRESULT(0)
+                    LRESULT(0)
                 }
                 WM_CLOSE => {
                     println!("WM_CLOSE");
                     DestroyWindow(hwnd);
-                    // LRESULT(0)
+                    LRESULT(0)
                 }
                 WM_DESTROY => {
                     println!("WM_DESTROY");
                     PostQuitMessage(69);
-                    // LRESULT(0)   
+                    LRESULT(0)   
                 }
-
                 WM_CHAR => {
-                    // io::KEYBOARD.handle_char(wparam.0 as u32);
-                    // println!("parsed char: {}", io::KEYBOARD.char_code_to_char(loc!()).unwrap_or(char::default()));
-
                     io::KEYBOARD.on_char(wparam.0 as u32);
-
-                    // LRESULT(0)
+                    LRESULT(0)
                 }
                 WM_KEYDOWN | WM_SYSKEYDOWN => {
-                    // io::KEYBOARD.handle_key_down(wparam.0 as u32, match msg == WM_KEYDOWN {
-                    //     true => KeyType::Key,
-                    //     false => KeyType::SysKey
-                    // });
-                    let key_is_down = lparam.0 & (1 << 31) == 0;
-                    let key_was_down = lparam.0 & (1 << 30) != 1;
+                    // See https://learn.microsoft.com/en-us/windows/win32/inputdev/about-keyboard-input#keystroke-message-flags
+                    let auto_repeat: bool = (lparam.0 >> 30) & 1 == 1;
 
+                    if auto_repeat {
+                        io::KEYBOARD.enable_auto_repeat();
+                    }
                     io::KEYBOARD.on_key_press(wparam.0 as u32);
 
-                    // println!("keydown: {:?}", io::KEYBOARD);
-                    // LRESULT(0)
+                    return LRESULT(0);
                 }
                 WM_KEYUP | WM_SYSKEYUP => {
-
-
-
-                    // io::KEYBOARD.handle_key_up();
-
+                    io::KEYBOARD.disable_auto_repeat();
                     io::KEYBOARD.on_key_release(wparam.0 as u32);
-
-                    // println!("keyup: {:?}", io::KEYBOARD);
-                    // LRESULT(0)
+                    
+                    LRESULT(0)
                 }
                 _ => {
-                    // println!("{}: {:?}", crate::window::message::_id_to_name(msg), wparam.0);
+                    
                     return DefWindowProcA(hwnd, msg, wparam, lparam);
                 }
             }
             // println!("{}: {:?}", crate::window::message::_id_to_name(msg), wparam.0);
-            LRESULT(0)
+            
         }
     }
 

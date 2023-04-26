@@ -1,20 +1,11 @@
-use std::borrow::BorrowMut;
-
-use super::error::{self, CallLocation};
-
 const MAX_BUFFER_SIZE: usize = 16;
 
 #[derive(Debug, Clone)]
 pub struct Keyboard {
-    // pub key_type: KeyType,
-    // pub key_state: KeyState,
-    // pub key_buffer: Option<u32>,
-    // pub char_buffer: Option<u32>,
-
     pub key_states: Option<Vec<u8>>,
     
-    pub key_buffer2: Option<Vec<KeyEvent>>,
-    pub char_buffer2: Option<Vec<char>>,
+    pub key_buffer: Option<Vec<KeyEvent>>,
+    pub char_buffer: Option<Vec<char>>,
     pub auto_repeat_enabled: bool
 }
 
@@ -46,96 +37,52 @@ pub enum KeyState {
 
 
 impl Keyboard {
-    // old and very buggy stuff
+    /// Reset buffers and keystate bitmap
     pub fn reset(&mut self) {
         self.key_states = Some(vec![0; 256]);
-        self.key_buffer2 = Some(vec![]);
-        self.char_buffer2 = Some(vec![])
+        self.key_buffer = Some(vec![]);
+        self.char_buffer = Some(vec![])
     }
 
-    // pub fn clear(&mut self) {
-    //     self.char_buffer = None;
-    //     self.key_buffer = None;
-    //     self.key_states = Some(vec![0; 256]);
-    //     self.key_state = KeyState::Invalid;
-    //     self.key_type = KeyType::Idle;
-    // }
-
-    // pub fn handle_key_down(&mut self, key_buffer: u32, key_type: KeyType) {
-    //     self.key_states.as_deref_mut().unwrap()[key_buffer as usize] = 1;
-
-    //     self.key_buffer = Some(key_buffer);
-    //     self.key_type = key_type;
-    //     self.char_buffer = None;
-    //     self.key_state = KeyState::Press;
-
-    //     // println!("{:?}", self.key_states);
-    // }
-
-    // pub fn handle_key_up(&mut self) {
-    //     self.key_state = KeyState::Release;
-    //     self.key_states.as_deref_mut().unwrap()[self.key_buffer.unwrap() as usize] = 0;
-    //     // println!("{:?}", self.key_states);
-    // }
-
-    // pub fn handle_char(&mut self, char_buffer: u32) {
-    //     self.char_buffer = Some(char_buffer);
-    // }
-
-    // pub fn char_code_to_char(&self, origin: CallLocation) -> Option<char> {
-    //     let code: Option<u32> = self.char_buffer;
-    //     if code.is_none() || self.key_state != KeyState::Press {
-    //         return None;
-    //     }
-    //     return Some(char::from_u32(code.unwrap()).unwrap_or_else(|| {
-    //         error::WindowError::new("Unable to convert u32 char to normal char.", None, origin)
-    //     }));
-    // }
-
-    // pub fn key_is_pressed(&self, target_key: u16) -> bool {
-    //     if self.key_buffer.is_none() || self.key_buffer.unwrap() != target_key as u32 {
-    //         return false;
-    //     }
-
-    //     return self.key_state == KeyState::Press;
-    // }
-
-    // new stuff
-
-    pub fn key_is_pressed2(&self, target_key: u16) -> bool {
+    /// Check if key is pressed but don't remove it from the KeyEvent queue. See key_is_pressed_clear()
+    pub fn key_is_pressed(&self, target_key: u16) -> bool {
         return self.key_states.as_ref().unwrap()[target_key as usize] == 1;
     }
 
-    pub fn read_key(&mut self) -> Option<KeyEvent>{
-        if !self.key_buffer2.as_mut().unwrap().is_empty() {
-            let e: KeyEvent = self.key_buffer2.as_mut().unwrap().last().unwrap().to_owned();
-            self.key_buffer2.as_mut().unwrap().pop();
+    /// Check if key is pressed and remove it from the KeyEvent queue. See key_is_pressed()
+    pub fn key_is_pressed_clear(&mut self, target_key: u16) -> bool {
+        let key_state = self.key_states.as_ref().unwrap()[target_key as usize] == 1;
+        self.key_states.as_mut().unwrap()[target_key as usize] = 0;
+        return key_state;
+    }
+
+    /// Read key from the queue and remove it 
+    pub fn read_key(&mut self) -> Option<KeyEvent> {
+        if !self.key_buffer.as_mut().unwrap().is_empty() {
+            let e: KeyEvent = self.key_buffer.as_mut().unwrap().last().unwrap().to_owned();
+            self.key_buffer.as_mut().unwrap().remove(0);
             return Some(e);
         }
         return None;
     }
 
-    pub fn key_queue_is_empty(&self) -> bool {
-        return self.key_buffer2.as_ref().unwrap().is_empty();
-    }
-
-    pub fn char_queue_is_empty(&self) -> bool {
-        return self.char_buffer2.as_ref().unwrap().is_empty();
-    }
-
-    pub fn read_char(&mut self, origin: CallLocation) -> Option<char> {
-        if !self.char_buffer2.as_mut().unwrap().is_empty() {
-            return Some(self.char_buffer2.as_mut().unwrap().last().unwrap().to_owned());
+    /// Read char from the queue and remove it
+    pub fn read_char(&mut self) -> Option<char> {
+        
+        if !self.char_buffer.as_mut().unwrap().is_empty() {
+            let ch: Option<char> = Some(self.char_buffer.as_mut().unwrap().last().unwrap().to_owned());
+            self.char_buffer.as_mut().unwrap().remove(0);
+            return ch;
         }
         return None;
     }
 
     pub fn clear_key_queue(&mut self) {
-        self.key_buffer2 = Some(vec![]);
+        self.key_buffer = Some(vec![]);
     }
 
     pub fn clear_char_queue(&mut self) {
-        self.char_buffer2 = Some(vec![]);
+        self.char_buffer = Some(vec![]);
     }
 
     pub fn clear_all_queues(&mut self) {
@@ -153,30 +100,33 @@ impl Keyboard {
 
     pub fn on_key_press(&mut self, key_code: u32) {
         self.key_states.as_mut().unwrap()[key_code as usize] = 1;
-        self.key_buffer2.as_mut().unwrap().push(KeyEvent { key_state: KeyState2::Press, key_code });
-        trim_buffer(&mut self.key_buffer2.as_mut().unwrap());
-        // println!("{:?}", self);
-
+        self.key_buffer.as_mut().unwrap().push(KeyEvent { key_state: KeyState2::Press, key_code });
+        trim_buffer(&mut self.key_buffer.as_mut().unwrap());
     }
 
     pub fn on_key_release(&mut self, key_code: u32) {
         self.key_states.as_mut().unwrap()[key_code as usize] = 0;
-        self.key_buffer2.as_mut().unwrap().push(KeyEvent { key_state: KeyState2::Release, key_code });
-        trim_buffer(&mut self.key_buffer2.as_mut().as_mut().unwrap());
-        // println!("{:?}", self);
-
+        self.key_buffer.as_mut().unwrap().push(KeyEvent { key_state: KeyState2::Release, key_code });
+        trim_buffer(&mut self.key_buffer.as_mut().as_mut().unwrap());
     }
 
     pub fn on_char(&mut self, char_code: u32) {
-        self.char_buffer2.as_mut().unwrap().push(char::from_u32(char_code).unwrap());
-        // println!("{:?}", self);
+        self.char_buffer.as_mut().unwrap().push(char::from_u32(char_code).unwrap());
+        trim_buffer(&mut self.char_buffer.as_mut().as_mut().unwrap());
+    }
 
+    pub fn key_queue_is_empty(&self) -> bool {
+        return self.key_buffer.as_ref().unwrap().is_empty();
+    }
+
+    pub fn char_queue_is_empty(&self) -> bool {
+        return self.char_buffer.as_ref().unwrap().is_empty();
     }
 
 }
 
-pub fn trim_buffer(buffer: &mut Vec<KeyEvent>) {
+pub fn trim_buffer<T>(buffer: &mut Vec<T>) {
     while buffer.len() > MAX_BUFFER_SIZE {
-        buffer.pop();
+        buffer.remove(0);
     }
 }
