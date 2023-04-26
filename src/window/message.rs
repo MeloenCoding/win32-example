@@ -1,3 +1,6 @@
+/// See this [list](https://wiki.winehq.org/List_Of_Windows_Messages) 
+/// for all the winodow messages. All of the windowMessages are in this function as well.<br>
+/// This is just a function to see what messages you are receiving. 
 pub fn _id_to_name(id: u32) -> String {
     let map: std::collections::HashMap<u32, &str> = std::collections::hash_map::HashMap::from([
         ( 0, "WM_NUL"),

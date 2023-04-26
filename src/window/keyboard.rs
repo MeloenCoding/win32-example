@@ -18,27 +18,24 @@ pub struct Keyboard {
     /// [ch]: windows::Windows::Win32::UI::WindowsAndMessaging::WM_CHAR
     pub char_queue: Vec<char>,
 
-    /// 
+    /// If the user keeps a key pressed in this is true.
     pub auto_repeat_enabled: bool
 }
 
 #[derive(Debug, Copy, Clone)]
+/// A event with info about the [KeyState] and the keycode.
 pub struct KeyEvent {
     key_state: KeyState,
     key_code: u32
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
+/// ### Possible [KeyState]'s
+/// - `Press` = `0`
+/// - `Release` = `1`
 pub enum KeyState {
     Press,
     Release
-}
-
-#[derive(Debug,PartialEq)]
-pub enum KeyType {
-    SysKey,
-    Key,
-    Idle
 }
 
 impl Keyboard {
@@ -54,7 +51,7 @@ impl Keyboard {
         return self.key_states[target_key as usize] == 1;
     }
 
-    /// Check if key is pressed and remove it from the [KeyEvent] queue. 
+    /// Check if key is pressed and remove it from the [KeyEvent] queue.<br> 
     /// If you don't want to remove the key, See [key_is_pressed()]
     pub fn key_is_pressed_clear(&mut self, target_key: u16) -> bool {
         let key_state = self.key_states[target_key as usize] == 1;
@@ -62,7 +59,7 @@ impl Keyboard {
         return key_state;
     }
 
-    /// Get the [KeyEvent] from the 
+    /// Get the [KeyEvent] from the [KeyEvent]
     pub fn read_key(&mut self) -> Option<KeyEvent> {
         if !self.key_queue.is_empty() {
             let e: KeyEvent = self.key_queue.last().unwrap().to_owned();
@@ -131,7 +128,7 @@ impl Keyboard {
 
 }
 
-pub fn trim_buffer<T>(buffer: &mut Vec<T>) {
+fn trim_buffer<T>(buffer: &mut Vec<T>) {
     while buffer.len() > MAX_BUFFER_SIZE {
         buffer.remove(0);
     }

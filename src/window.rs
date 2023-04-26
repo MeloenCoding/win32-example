@@ -8,7 +8,7 @@ pub mod mouse;
 pub mod keyboard;
 pub mod message;
 
-/// We need some public variables for the wndproc because we can't pass in any other arguments in that function.
+/// We need some public variables for the wndproc because we can't pass in any other arguments in that function.<br>
 /// I know public variables are bad but i haven't seen a solution to use variables in [`Self::wndproc()`].
 pub mod io {
     use super::mouse::Mouse;
@@ -23,7 +23,7 @@ pub mod io {
     };
 }
 
-/// The Window class where every event from the window will be obtainable
+/// The Window class which holds every recieved windowEvent and the window data.
 pub struct Window<'a> {
     pub instance: HINSTANCE,
     pub class_name: PCSTR,
@@ -57,7 +57,7 @@ pub fn create_message_box(lptext: PCSTR, utype: MESSAGEBOX_STYLE, wlanguageid: u
 }
 
 impl Window<'_> {
-    /// Create window
+    /// Create a window instance
     pub fn new(class_name: PCSTR, style: WNDCLASS_STYLES) -> Window<'static> {
         let class_name: PCSTR = class_name; // ID of the program
         
@@ -144,6 +144,38 @@ impl Window<'_> {
         unsafe { ShowWindow(self.hwnd, windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD(1)); };
     }
 
+    /// A function to handle all of the Window Events.
+    /// # Example
+    /// ```rust
+    /// let mut input_str: String = "".to_string();
+    /// loop { // has to be in a loop because you want to hanlde more then one event
+    ///     match window.handle_message() {
+    ///         Err((msg, result)) => {
+    ///             // result = (0 = there is an exit without an error) | ( -1 = there is an exit with an error)
+    /// 
+    ///             // In this example i'll create an WindowError wich creates an MessageBox with the error_desc  
+    ///             // the error code and the location of the error
+    ///             if result == -1 {
+    ///                 let (error_desc, error_code) = window.get_error_desc();
+    ///                 window::error::WindowError::new(&error_desc, Some(error_code as i32), loc!());
+    ///             }
+    ///             
+    ///             break;
+    ///         },
+    ///         Ok(_msg) => {
+    ///             if let Some(ch) = window.keyboard.read_char() {
+    ///                 input_str.push(ch);
+    ///             }
+    ///             if window.keyboard.key_is_pressed_clear(VK_RETURN.0) {
+    ///                 println!("{:?}", input_str);
+    ///                 input_str = "".to_string();
+    ///             }
+    ///         },
+    ///     }
+    /// }
+    ///
+    /// // print the exit codes on a exit without errors
+    /// window.get_exit_codes();
     pub fn handle_message(&mut self) -> Result<MSG, (MSG, i32)> {
         /*
             For info about this i really recommend the video of ChilliTomatoNoodle (https://youtu.be/Fx5bGZ3B_CI?t=152)
@@ -157,10 +189,10 @@ impl Window<'_> {
             makes things clear.
         */
 
-        let get_result: BOOL = unsafe { GetMessageA(&mut self.msg_buffer, None, 0, 0) };
-        if !(get_result.0 > 0) {
-            self.last_result = get_result;
-            return Err((self.msg_buffer.to_owned(), get_result.0))
+        let get_message_result: BOOL = unsafe { GetMessageA(&mut self.msg_buffer, None, 0, 0) };
+        if !(get_message_result.0 > 0) {
+            self.last_result = get_message_result;
+            return Err((self.msg_buffer.to_owned(), get_message_result.0))
         }
         
         unsafe { TranslateMessage(&mut self.msg_buffer) };
@@ -226,22 +258,24 @@ impl Window<'_> {
         }
     }
 
-    pub fn get_exit_codes(&self) {
-        /*
-            Computate the WIN32_ERROR to the description of the error. For more info check: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes
-        */
+    pub fn print_exit_codes(&self) {
+        let (error_desc, error_code) = self.get_error_desc();
         
-        // To test this function you could uncomment this piece of code and see what it returns.
-        // unsafe { SetLastError(windows::Win32::Foundation::WIN32_ERROR(5)) };
-        
-        // If you want to see what langid it would use if you set dwLanguageId to 0, uncomment this:
-        // println!("{}", unsafe {windows::Win32::Globalization::GetUserDefaultLangID()});
+        if error_code == 0 {
+            // If the error code == 0, there is no error. So there is no need for priting a succes error :)
+            return println!("Succesfull exit with codes: last getResult: {:?}, wParam: {}", self.last_result.0, self.msg_buffer.wParam.0)
+        }
 
+        return println!("{}", error_desc);
+        
+    }
+
+    pub fn get_error_desc(&self) -> (String, u32) {
         let err_code: u32 = unsafe { GetLastError().0 }; // Get the last WIN32_ERROR and get the id from it (u32)
         let mut err_buffer: *mut u8 = std::ptr::null_mut(); // Create a buffer for windows where it should store the error message
         if err_code == 0 {
             // If the error code == 0, there is no error. So there is no need for priting a succes error :)
-            return println!("Succesfull exit with codes: last getResult: {:?}, wParam: {}", self.last_result.0, self.msg_buffer.wParam.0)
+            return (format!("Succesfull exit with codes: last getResult: {:?}, wParam: {}", self.last_result.0, self.msg_buffer.wParam.0), err_code)
         }
 
         let err_msg_lenght: u32 = unsafe {
@@ -303,16 +337,15 @@ impl Window<'_> {
                 Could be caused by an invalid error code or an invalid or not correctly installed LCID
             */
             
-            return println!("Unable to find error description. Errorcode: {}", err_code);
+            return (format!("Code: {}: Unable to find error description", err_code), err_code);
         }
-        
+
         // If there is an error, print all the return codes,
-        println!("Unsuccesfull exit with codes getResult: {:?}, wParam: {}, lastError: {}", self.last_result.0, self.msg_buffer.wParam.0, unsafe { GetLastError().0 });
+        // println!("Unsuccesfull exit with codes getResult: {:?}, wParam: {}, lastError: {}", self.last_result.0, self.msg_buffer.wParam.0, unsafe { GetLastError().0 });
         // and print out the description of the code
-        let slice = unsafe { std::slice::from_raw_parts(err_buffer, (err_msg_lenght - 2) as _).to_vec()};
+        let slice: Vec<u8> = unsafe { std::slice::from_raw_parts(err_buffer, (err_msg_lenght - 2) as _).to_vec()};
         
-        return println!("Errorcode {}: {:?}", err_code, String::from_utf8(slice).unwrap());
-        
+        return (format!("Code {}: {}", err_code, String::from_utf8(slice).unwrap()), err_code);
     }
 
 }
