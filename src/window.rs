@@ -1,4 +1,4 @@
-use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_KILLFOCUS, KF_REPEAT}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
+use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_KILLFOCUS}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
 use crate::{loc};
 
 use self::keyboard::Keyboard;
@@ -8,23 +8,22 @@ pub mod mouse;
 pub mod keyboard;
 pub mod message;
 
+/// We need some public variables for the wndproc because we can't pass in any other arguments in that function.
+/// I know public variables are bad but i haven't seen a solution to use variables in [`Self::wndproc()`].
 pub mod io {
-    // We need some public variables for the wndproc because we can't pass in any other arguments in that function
     use super::mouse::Mouse;
     use super::keyboard::Keyboard;
 
-    // static mut D: Vec<bool> = Vec::with_capacity(256);
-
+    /// The Mouse state
     pub static mut MOUSE: Mouse = Mouse { x: 0, y: 0 };
-    // pub static mut KEYBOARD: Keyboard = Keyboard { key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, key_code: None, char_code: None};
+    /// The keyboard state   
     pub static mut KEYBOARD: Keyboard = Keyboard { 
-        // key_type: super::keyboard::KeyType::Idle, key_state: super::keyboard::KeyState::Invalid, 
-        // key_buffer: None, char_buffer: None, 
-        key_states: None, key_buffer: None, 
-        char_buffer: None, auto_repeat_enabled: false
-     };
+        key_states: vec![], key_queue: vec![], 
+        char_queue: vec![], auto_repeat_enabled: false
+    };
 }
 
+/// The Window class where every event from the window will be obtainable
 pub struct Window<'a> {
     pub instance: HINSTANCE,
     pub class_name: PCSTR,
@@ -37,6 +36,7 @@ pub struct Window<'a> {
     // pub mouse: &'a Mouse
 }
 
+/// Create a message box
 pub fn create_message_box(lptext: PCSTR, utype: MESSAGEBOX_STYLE, wlanguageid: u16 ) -> MESSAGEBOX_RESULT {
     let lpcaption: PCSTR = match utype {
         MESSAGEBOX_STYLE(16) => {
@@ -57,29 +57,28 @@ pub fn create_message_box(lptext: PCSTR, utype: MESSAGEBOX_STYLE, wlanguageid: u
 }
 
 impl Window<'_> {
+    /// Create window
     pub fn new(class_name: PCSTR, style: WNDCLASS_STYLES) -> Window<'static> {
         let class_name: PCSTR = class_name; // ID of the program
         
+        /* 
+            hInstance is the handle to an instance or handle to a module. The 
+            operating system uses this value to identify the executable or EXE 
+            when it's loaded in memory.
+        */
         let instance: HINSTANCE = unsafe { 
-            /* 
-                hInstance is the handle to an instance or handle to a module. The 
-                operating system uses this value to identify the executable or EXE 
-                when it's loaded in memory.
-            */
-
-            GetModuleHandleA(None).unwrap_or_else(|_| {
+            GetModuleHandleA(None).unwrap_or_else(|_| { 
                 error::WindowError::new("Unable to create an hInstance with GetModuleHandle.", None, loc!());
             })
         };
 
+        /*
+            Contains window class information. It is used with the RegisterClassEx 
+            and GetClassInfoEx functions.
+            For more info about the fields of this class: 
+            https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassexa
+        */
         let class: WNDCLASSEXA = WNDCLASSEXA { 
-            /*
-                Contains window class information. It is used with the RegisterClassEx 
-                and GetClassInfoEx functions.
-                For more info about the fields of this class: 
-                https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassexa
-            */
-
             cbSize: std::mem::size_of::<WNDCLASSEXA>() as u32,
             style,
             lpfnWndProc: Some(Self::wndproc),
@@ -96,18 +95,17 @@ impl Window<'_> {
             hIconSm: HICON(0isize as _),
         };
 
+        /*
+            If you register the window class by using RegisterClassExA, the application tells the system that 
+            the windows of the created class expect messages with text or character parameters to use the ANSI 
+            character set.
+
+            If the function succeeds, the return value is a class atom that uniquely identifies the class being 
+            registered. If the function fails, the return value is zero.
+
+            For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerclassexa
+        */
         let atom: u16 = unsafe { 
-            /*
-                If you register the window class by using RegisterClassExA, the application tells the system that 
-                the windows of the created class expect messages with text or character parameters to use the ANSI 
-                character set.
-
-                If the function succeeds, the return value is a class atom that uniquely identifies the class being 
-                registered. If the function fails, the return value is zero.
-
-                For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerclassexa
-            */
-
             RegisterClassExA(&class) 
         };
 
@@ -115,18 +113,17 @@ impl Window<'_> {
             panic!("unable to register class");
         }
         
+        /*
+            Creates an overlapped, pop-up, or child window. It specifies the window class, window title, window 
+            style, and (optionally) the initial position and size of the window. The function also specifies 
+            the window's parent or owner, if any, and the window's menu.
+
+            If the function succeeds, the return value is a handle to the new window. If the function fails, the 
+            return value is NULL. We can get the error info by calling GetLastError. See GetExitCodes().
+
+            For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowexa
+        */
         let hwnd: HWND = unsafe { 
-            /*
-                Creates an overlapped, pop-up, or child window. It specifies the window class, window title, window 
-                style, and (optionally) the initial position and size of the window. The function also specifies 
-                the window's parent or owner, if any, and the window's menu.
-
-                If the function succeeds, the return value is a handle to the new window. If the function fails, the 
-                return value is NULL. We can get the error info by calling GetLastError. See GetExitCodes().
-
-                For more info see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowexa
-            */
-
             CreateWindowExA(windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
             class_name, class_name, 
             WS_CAPTION | WS_MINIMIZEBOX | WS_SYSMENU,
@@ -181,8 +178,6 @@ impl Window<'_> {
             For more info about wndproc see: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nc-winuser-wndproc
             And for a list with all the messages see: https://wiki.winehq.org/List_Of_Windows_Messages 
         */
-
-        
 
         unsafe {
             match msg {

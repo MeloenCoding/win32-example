@@ -16,7 +16,6 @@ fn main() {
     window.show_window(); 
 
     let mut input_str: String = "".to_string();
-
     loop {
         match window.handle_message() {
             Err((_msg, _result)) => {
