@@ -2,7 +2,7 @@ const MAX_BUFFER_SIZE: usize = 16;
 
 #[derive(Debug, Clone)]
 pub struct Keyboard {
-    /// A map of all the keys represented as 0, 1. 0 means key is up and 1 means key is up
+    /// A map of all the keys represented as 0, 1. 0 means key is up and 1 means key is down
     pub key_states: Vec<u8>,
 
     /// A FIFO (First In First Out) list of all the recent [KeyEvent]'s.
@@ -39,24 +39,24 @@ pub enum KeyState {
 }
 
 impl Keyboard {
-    /// Reset buffers and keystate bitmap
+    /// Reset buffers and keystate map
     pub fn reset(&mut self) {
         self.key_states = vec![0; 256];
         self.key_queue = vec![];
         self.char_queue = vec![];
     }
 
-    /// Check if key is pressed but don't remove it from the KeyEvent queue. See key_is_pressed_clear()
-    pub fn key_is_pressed(&self, target_key: u16) -> bool {
-        return self.key_states[target_key as usize] == 1;
-    }
-
     /// Check if key is pressed and remove it from the [KeyEvent] queue.<br> 
     /// If you don't want to remove the key, See [key_is_pressed()]
-    pub fn key_is_pressed_clear(&mut self, target_key: u16) -> bool {
-        let key_state = self.key_states[target_key as usize] == 1;
+    pub fn key_is_pressed_pop(&mut self, target_key: u16) -> bool {
+        let key_state: bool = self.key_states[target_key as usize] == 1;
         self.key_states[target_key as usize] = 0;
         return key_state;
+    }
+
+    /// Check if key is pressed but don't remove it from the KeyEvent queue. See [key_is_pressed_pop()]
+    pub fn key_is_pressed(&self, target_key: u16) -> bool {
+        return self.key_states[target_key as usize] == 1;
     }
 
     /// Get the [KeyEvent] from the [KeyEvent]
@@ -69,13 +69,13 @@ impl Keyboard {
         return None;
     }
 
-    /// Read [char] from the queue and remove it
+    /// Read [char] from the [Keyboard.char_queue] and remove it
     pub fn read_char(&mut self) -> Option<char> {
         
         if !self.char_queue.is_empty() {
-            let ch: Option<char> = Some(self.char_queue.last().unwrap().to_owned());
+            let ch: char = self.char_queue.last().unwrap().to_owned();
             self.char_queue.remove(0);
-            return ch;
+            return Some(ch);
         }
         return None;
     }

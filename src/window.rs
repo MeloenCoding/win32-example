@@ -1,21 +1,30 @@
-use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_KILLFOCUS}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
+
+
+use windows::{Win32::{UI::{WindowsAndMessaging::{DefWindowProcA, CreateWindowExA, WS_CAPTION, WS_SYSMENU, ShowWindow, LoadCursorW, IDC_ARROW, WNDCLASSEXA, RegisterClassExA, WM_CLOSE, PostQuitMessage, WS_MINIMIZEBOX, HICON, WM_DESTROY, DestroyWindow, WNDCLASS_STYLES, MSG, GetMessageA, TranslateMessage, DispatchMessageA, MessageBoxExA, MESSAGEBOX_STYLE, MESSAGEBOX_RESULT, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_KILLFOCUS, WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_RBUTTONUP, WM_RBUTTONDOWN, WM_MOUSEWHEEL}}, Foundation::{HWND, WPARAM, LPARAM, LRESULT, HINSTANCE, BOOL, GetLastError, POINTS}, System::{LibraryLoader::{GetModuleHandleA}, Diagnostics::Debug::{FormatMessageA, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER}}, Graphics::Gdi::HBRUSH}, core::{PCSTR, PSTR}, s};
 use crate::{loc};
 
-use self::keyboard::Keyboard;
+use self::{keyboard::Keyboard, mouse::Mouse};
 
 pub mod error;
 pub mod mouse;
 pub mod keyboard;
 pub mod message;
 
-/// We need some public variables for the wndproc because we can't pass in any other arguments in that function.<br>
-/// I know public variables are bad but i haven't seen a solution to use variables in [`Self::wndproc()`].
+/**
+    We need some public variables for the wndproc because we can't pass in any other arguments in that function.<br>
+    I know public variables are bad but i haven't seen a solution to use variables in [`self::wndproc()`].
+*/
 pub mod io {
     use super::mouse::Mouse;
     use super::keyboard::Keyboard;
 
     /// The Mouse state
-    pub static mut MOUSE: Mouse = Mouse { x: 0, y: 0 };
+    pub static mut MOUSE: Mouse = Mouse { 
+        x: 0, y: 0, event_queue: vec![], 
+        left_pressed: false, right_pressed: false,
+        is_in_window: false,
+        wheel_delta_carry: 0,
+    };
     /// The keyboard state   
     pub static mut KEYBOARD: Keyboard = Keyboard { 
         key_states: vec![], key_queue: vec![], 
@@ -28,12 +37,14 @@ pub struct Window<'a> {
     pub instance: HINSTANCE,
     pub class_name: PCSTR,
     pub atom: u16,
+    pub width: i32,
+    pub height: i32,
     pub class: WNDCLASSEXA,
     pub hwnd: HWND,
     pub msg_buffer: MSG,
     pub last_result: BOOL,
     pub keyboard: &'a mut Keyboard,
-    // pub mouse: &'a Mouse
+    pub mouse: &'a mut Mouse
 }
 
 /// Create a message box
@@ -58,7 +69,7 @@ pub fn create_message_box(lptext: PCSTR, utype: MESSAGEBOX_STYLE, wlanguageid: u
 
 impl Window<'_> {
     /// Create a window instance
-    pub fn new(class_name: PCSTR, style: WNDCLASS_STYLES) -> Window<'static> {
+    pub fn new(class_name: PCSTR, style: WNDCLASS_STYLES, window_width: i32, window_height: i32) -> Window<'static> {
         let class_name: PCSTR = class_name; // ID of the program
         
         /* 
@@ -127,14 +138,26 @@ impl Window<'_> {
             CreateWindowExA(windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
             class_name, class_name, 
             WS_CAPTION | WS_MINIMIZEBOX | WS_SYSMENU,
-            200, 200, 896, 672,
+            200, 200, window_width, window_height,
             None, None, instance, None) 
         };
 
         unsafe { io::KEYBOARD.reset() };
 
         // return the new Window instance
-        Window { instance, class_name, atom, class, hwnd, msg_buffer: MSG::default(), last_result: BOOL::default(), keyboard: unsafe { &mut io::KEYBOARD }}
+        Window { 
+            instance, 
+            class_name, 
+            atom, 
+            class, 
+            hwnd, 
+            msg_buffer: MSG::default(), 
+            last_result: BOOL::default(), 
+            keyboard: unsafe { &mut io::KEYBOARD },
+            mouse: unsafe { &mut io::MOUSE },
+            width: window_width,
+            height: window_height,
+        }
 
     }
 
@@ -144,38 +167,40 @@ impl Window<'_> {
         unsafe { ShowWindow(self.hwnd, windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD(1)); };
     }
 
-    /// A function to handle all of the Window Events.
-    /// # Example
-    /// ```rust
-    /// let mut input_str: String = "".to_string();
-    /// loop { // has to be in a loop because you want to hanlde more then one event
-    ///     match window.handle_message() {
-    ///         Err((msg, result)) => {
-    ///             // result = (0 = there is an exit without an error) | ( -1 = there is an exit with an error)
-    /// 
-    ///             // In this example i'll create an WindowError wich creates an MessageBox with the error_desc  
-    ///             // the error code and the location of the error
-    ///             if result == -1 {
-    ///                 let (error_desc, error_code) = window.get_error_desc();
-    ///                 window::error::WindowError::new(&error_desc, Some(error_code as i32), loc!());
-    ///             }
-    ///             
-    ///             break;
-    ///         },
-    ///         Ok(_msg) => {
-    ///             if let Some(ch) = window.keyboard.read_char() {
-    ///                 input_str.push(ch);
-    ///             }
-    ///             if window.keyboard.key_is_pressed_clear(VK_RETURN.0) {
-    ///                 println!("{:?}", input_str);
-    ///                 input_str = "".to_string();
-    ///             }
-    ///         },
-    ///     }
-    /// }
-    ///
-    /// // print the exit codes on a exit without errors
-    /// window.get_exit_codes();
+    /**
+        A function to handle all of the Window Events.
+        # Example
+        ```rust
+        let mut input_str: String = "".to_string();
+        loop { // has to be in a loop because you want to hanlde more then one event
+            match window.handle_message() {
+                Err((msg, result)) => {
+                    // result = (0 = there is an exit without an error) | ( -1 = there is an exit with an error)
+
+                    // In this example i'll create an WindowError wich creates an MessageBox with the error_desc  
+                    // the error code and the location of the error
+                    if result == -1 {
+                        let (error_desc, error_code) = window.get_error_desc();
+                        window::error::WindowError::new(&error_desc, Some(error_code as i32), loc!());
+                    }
+                    
+                    break;
+                },
+                Ok(_msg) => {
+                    if let Some(ch) = window.keyboard.read_char() {
+                        input_str.push(ch);
+                    }
+                    if window.keyboard.key_is_pressed_clear(VK_RETURN.0) {
+                        println!("{:?}", input_str);
+                        input_str = "".to_string();
+                    }
+                },
+            }
+        }
+
+        // print the exit codes on a exit without errors
+        window.get_exit_codes();
+    */
     pub fn handle_message(&mut self) -> Result<MSG, (MSG, i32)> {
         /*
             For info about this i really recommend the video of ChilliTomatoNoodle (https://youtu.be/Fx5bGZ3B_CI?t=152)
@@ -213,23 +238,22 @@ impl Window<'_> {
 
         unsafe {
             match msg {
+                // General window messages
                 WM_KILLFOCUS => {
-                    io::KEYBOARD.reset();
-                    LRESULT(0)
+                    io::KEYBOARD.reset();                    
                 }
                 WM_CLOSE => {
                     println!("WM_CLOSE");
-                    DestroyWindow(hwnd);
-                    LRESULT(0)
+                    DestroyWindow(hwnd);                    
                 }
                 WM_DESTROY => {
                     println!("WM_DESTROY");
-                    PostQuitMessage(69);
-                    LRESULT(0)   
+                    PostQuitMessage(0);                       
                 }
+
+                // Keyboard messages
                 WM_CHAR => {
                     io::KEYBOARD.on_char(wparam.0 as u32);
-                    LRESULT(0)
                 }
                 WM_KEYDOWN | WM_SYSKEYDOWN => {
                     // See https://learn.microsoft.com/en-us/windows/win32/inputdev/about-keyboard-input#keystroke-message-flags
@@ -238,23 +262,51 @@ impl Window<'_> {
                     if auto_repeat {
                         io::KEYBOARD.enable_auto_repeat();
                     }
-                    io::KEYBOARD.on_key_press(wparam.0 as u32);
-
-                    return LRESULT(0);
+                    io::KEYBOARD.on_key_press(wparam.0 as u32);                
                 }
                 WM_KEYUP | WM_SYSKEYUP => {
                     io::KEYBOARD.disable_auto_repeat();
                     io::KEYBOARD.on_key_release(wparam.0 as u32);
-                    
-                    LRESULT(0)
                 }
-                _ => {
+
+                // Mouse messages 
+                WM_MOUSEMOVE => {
+                    io::MOUSE.on_mouse_move(make_points(lparam))
+                }
+                WM_LBUTTONDOWN => {
+                    io::MOUSE.on_left_press()
+                }
+                WM_LBUTTONUP => {
+                    io::MOUSE.on_left_release()
+                }
+                WM_RBUTTONUP => {
+                    io::MOUSE.on_right_release()
+                }
+                WM_RBUTTONDOWN => {
+                    io::MOUSE.on_right_press()
+                }
+
+                // WM_MBUTTONDOWN => {
                     
+                // }
+                // WM_MBUTTONUP => {
+
+                // }
+
+                WM_MOUSEWHEEL => {
+                    let points: POINTS = make_points(lparam);
+                    let delta: i16 = get_wheel_delta_wparam(wparam);
+                    io::MOUSE.on_wheel_delta(points.x, points.y, delta);
+                    println!("{}", io::MOUSE.event_queue.len());
+                    println!("{:?}\n", io::MOUSE.event_queue);
+                }   
+
+                _ => {
                     return DefWindowProcA(hwnd, msg, wparam, lparam);
                 }
             }
-            // println!("{}: {:?}", crate::window::message::_id_to_name(msg), wparam.0);
-            
+            // println!("{:?}", io::MOUSE.event_queue);
+            LRESULT(0)
         }
     }
 
@@ -340,12 +392,39 @@ impl Window<'_> {
             return (format!("Code: {}: Unable to find error description", err_code), err_code);
         }
 
-        // If there is an error, print all the return codes,
-        // println!("Unsuccesfull exit with codes getResult: {:?}, wParam: {}, lastError: {}", self.last_result.0, self.msg_buffer.wParam.0, unsafe { GetLastError().0 });
-        // and print out the description of the code
+        /*
+            If there is an error, print all the return codes,
+            println!("Unsuccesfull exit with codes getResult: {:?}, wParam: {}, lastError: {}", self.last_result.0, self.msg_buffer.wParam.0, unsafe { GetLastError().0 });
+            and print out the description of the code
+        */
         let slice: Vec<u8> = unsafe { std::slice::from_raw_parts(err_buffer, (err_msg_lenght - 2) as _).to_vec()};
         
         return (format!("Code {}: {}", err_code, String::from_utf8(slice).unwrap()), err_code);
     }
 
+}
+
+/**
+    This function is not in the windows crate so i made it my self. For more info <br>
+    see [this](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-makepoints?source=recommendations)
+*/
+pub fn make_points(lparam: LPARAM) -> POINTS {
+    let coords: i32  = lparam.0 as i32;
+
+    let x: i16 = (coords & 0x0000_FFFF) as i16;
+    let y: i16 = ((coords & -0x10000) >> 16) as i16;
+
+    return POINTS { x, y };
+}
+
+/**
+    This function is not in the windows crate so i made it my self. For more info <br>
+    see [this](https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mousewheel)
+*/
+pub fn get_wheel_delta_wparam(wparam: WPARAM) -> i16 {
+    let wheel_info: i32  = wparam.0 as i32;
+
+    let delta: i16 = ((wheel_info & -0x10000) >> 16) as i16;
+
+    return delta;
 }
