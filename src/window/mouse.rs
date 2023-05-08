@@ -8,6 +8,7 @@ pub struct Mouse {
     pub wheel_delta_carry: i16,
     pub left_pressed: bool,
     pub right_pressed: bool,
+    pub wheel_pressed: bool,
     pub x: i16,
     pub y: i16,
 }
@@ -17,6 +18,7 @@ pub struct MouseEvent {
     pub mouse_state: MouseState,
     pub left_pressed: bool,
     pub right_pressed: bool,
+    pub wheel_pressed: bool,
     pub x: i16,
     pub y: i16,
 }
@@ -29,10 +31,11 @@ pub enum MouseState {
     RRelease,
     WheelUp,
     WHeelDown,
+    WheelPress,
+    WHeelRelease,
     Move,
     Enter,
     Leave,
-    Invalid
 }
 
 impl Mouse {
@@ -55,20 +58,26 @@ impl Mouse {
     }
 
     fn on_wheel_up(&mut self, x: i16, y: i16) {
-        self.event_queue.push(MouseEvent { 
-            mouse_state: MouseState::WheelUp, 
-            left_pressed: self.left_pressed, right_pressed: self.right_pressed, 
-            x, y
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::WheelUp,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x,
+            y,
+            wheel_pressed: self.wheel_pressed,
         });
 
         trim_buffer(&mut self.event_queue);
     }
 
     fn on_wheel_down(&mut self, x: i16, y: i16) {
-        self.event_queue.push(MouseEvent { 
-            mouse_state: MouseState::WHeelDown, 
-            left_pressed: self.left_pressed, right_pressed: self.right_pressed, 
-            x, y
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::WHeelDown,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x,
+            y,
+            wheel_pressed: self.wheel_pressed,
         });
 
         trim_buffer(&mut self.event_queue);
@@ -76,11 +85,14 @@ impl Mouse {
 
     pub fn on_left_press(&mut self) {
         self.left_pressed = true;
-        
-        self.event_queue.push(MouseEvent { 
-            mouse_state: MouseState::LPress, 
-            left_pressed: self.left_pressed, right_pressed: self.right_pressed, 
-            x: self.x, y: self.y 
+
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::LPress,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x: self.x,
+            y: self.y,
+            wheel_pressed: self.wheel_pressed,
         });
 
         trim_buffer(&mut self.event_queue);
@@ -88,11 +100,14 @@ impl Mouse {
 
     pub fn on_right_press(&mut self) {
         self.right_pressed = true;
-        
-        self.event_queue.push(MouseEvent { 
-            mouse_state: MouseState::RPress, 
-            left_pressed: self.left_pressed, right_pressed: self.right_pressed, 
-            x: self.x, y: self.y 
+
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::RPress,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x: self.x,
+            y: self.y,
+            wheel_pressed: self.wheel_pressed,
         });
 
         trim_buffer(&mut self.event_queue);
@@ -100,11 +115,44 @@ impl Mouse {
 
     pub fn on_left_release(&mut self) {
         self.left_pressed = false;
-        
-        self.event_queue.push(MouseEvent { 
-            mouse_state: MouseState::LRelease, 
-            left_pressed: self.left_pressed, right_pressed: self.right_pressed, 
-            x: self.x, y: self.y 
+
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::LRelease,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x: self.x,
+            y: self.y,
+            wheel_pressed: self.wheel_pressed,
+        });
+
+        trim_buffer(&mut self.event_queue);
+    }
+
+    pub fn on_wheel_press(&mut self) {
+        self.wheel_pressed = true;
+
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::WheelPress,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x: self.x,
+            y: self.y,
+            wheel_pressed: self.wheel_pressed,
+        });
+
+        trim_buffer(&mut self.event_queue);
+    }
+
+    pub fn on_wheel_release(&mut self) {
+        self.wheel_pressed = false;
+
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::WheelUp,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x: self.x,
+            y: self.y,
+            wheel_pressed: self.wheel_pressed,
         });
 
         trim_buffer(&mut self.event_queue);
@@ -112,11 +160,14 @@ impl Mouse {
 
     pub fn on_right_release(&mut self) {
         self.right_pressed = false;
-        
-        self.event_queue.push(MouseEvent { 
-            mouse_state: MouseState::RRelease, 
-            left_pressed: self.left_pressed, right_pressed: self.right_pressed, 
-            x: self.x, y: self.y 
+
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::RRelease,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x: self.x,
+            y: self.y,
+            wheel_pressed: self.wheel_pressed,
         });
 
         trim_buffer(&mut self.event_queue);
@@ -125,11 +176,14 @@ impl Mouse {
     pub fn on_mouse_move(&mut self, points: POINTS) {
         self.x = points.x;
         self.y = points.y;
-        
-        self.event_queue.push(MouseEvent { 
-            mouse_state: MouseState::Move, 
-            left_pressed: self.left_pressed, right_pressed: self.right_pressed, 
-            x: self.x, y: self.y 
+
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::Move,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x: self.x,
+            y: self.y,
+            wheel_pressed: self.wheel_pressed,
         });
 
         trim_buffer(&mut self.event_queue);
@@ -138,10 +192,13 @@ impl Mouse {
     pub fn on_mouse_leave(&mut self) {
         self.is_in_window = false;
 
-        self.event_queue.push(MouseEvent { 
-            mouse_state: MouseState::Leave, 
-            left_pressed: self.left_pressed, right_pressed: self.right_pressed, 
-            x: self.x, y: self.y 
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::Leave,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x: self.x,
+            y: self.y,
+            wheel_pressed: self.wheel_pressed,
         });
 
         trim_buffer(&mut self.event_queue);
@@ -150,33 +207,23 @@ impl Mouse {
     pub fn on_mouse_enter(&mut self) {
         self.is_in_window = true;
 
-        self.event_queue.push(MouseEvent { 
-            mouse_state: MouseState::Enter, 
-            left_pressed: self.left_pressed, right_pressed: self.right_pressed, 
-            x: self.x, y: self.y 
+        self.event_queue.push(MouseEvent {
+            mouse_state: MouseState::Enter,
+            left_pressed: self.left_pressed,
+            right_pressed: self.right_pressed,
+            x: self.x,
+            y: self.y,
+            wheel_pressed: self.wheel_pressed,
         });
 
         trim_buffer(&mut self.event_queue);
     }
 
     pub fn get_pos(&self) -> POINTS {
-        POINTS { x: self.x, y:self.y }
-    }
-
-    pub fn get_pos_x(&self) -> i16 {
-        self.x
-    }
-
-    pub fn get_pos_y(&self) -> i16 {
-        self.y
-    }
-
-    pub fn is_left_pressed(&self) -> bool {
-        self.left_pressed
-    }
-
-    pub fn is_right_pressed(&self) -> bool {
-        self.right_pressed
+        POINTS {
+            x: self.x,
+            y: self.y,
+        }
     }
 
     pub fn read(&mut self) -> Option<MouseEvent> {
@@ -186,10 +233,6 @@ impl Mouse {
             return e;
         }
         None
-    }
-
-    pub fn is_in_window(&self) -> bool {
-        self.is_in_window
     }
 }
 

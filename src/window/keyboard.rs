@@ -14,19 +14,18 @@ pub struct Keyboard {
     pub key_queue: Vec<KeyEvent>,
 
     /// A FIFO (First In First Out) list of all the recent [WM_CHAR][ch] [KeyEvent]'s.
-    /// 
     /// [ch]: windows::Windows::Win32::UI::WindowsAndMessaging::WM_CHAR
     pub char_queue: Vec<char>,
 
     /// If the user keeps a key pressed in this is true.
-    pub auto_repeat_enabled: bool
+    pub auto_repeat_enabled: bool,
 }
 
 #[derive(Debug, Copy, Clone)]
 /// A event with info about the [KeyState] and the keycode.
 pub struct KeyEvent {
-    key_state: KeyState,
-    key_code: u32
+    pub key_state: KeyState,
+    pub key_code: u32,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -35,7 +34,7 @@ pub struct KeyEvent {
 /// - `Release` = `1`
 pub enum KeyState {
     Press,
-    Release
+    Release,
 }
 
 impl Keyboard {
@@ -46,7 +45,7 @@ impl Keyboard {
         self.char_queue = vec![];
     }
 
-    /// Check if key is pressed and remove it from the [KeyEvent] queue.<br> 
+    /// Check if key is pressed and remove it from the [KeyEvent] queue.<br>
     /// If you don't want to remove the key, See [key_is_pressed()]
     pub fn key_is_pressed_pop(&mut self, target_key: u16) -> bool {
         let key_state: bool = self.key_states[target_key as usize] == 1;
@@ -71,7 +70,6 @@ impl Keyboard {
 
     /// Read [char] from the [Keyboard.char_queue] and remove it
     pub fn read_char(&mut self) -> Option<char> {
-        
         if !self.char_queue.is_empty() {
             let ch: char = self.char_queue.last().unwrap().to_owned();
             self.char_queue.remove(0);
@@ -103,13 +101,19 @@ impl Keyboard {
 
     pub fn on_key_press(&mut self, key_code: u32) {
         self.key_states[key_code as usize] = 1;
-        self.key_queue.push(KeyEvent { key_state: KeyState::Press, key_code });
+        self.key_queue.push(KeyEvent {
+            key_state: KeyState::Press,
+            key_code,
+        });
         trim_buffer(&mut self.key_queue);
     }
 
     pub fn on_key_release(&mut self, key_code: u32) {
         self.key_states[key_code as usize] = 0;
-        self.key_queue.push(KeyEvent { key_state: KeyState::Release, key_code });
+        self.key_queue.push(KeyEvent {
+            key_state: KeyState::Release,
+            key_code,
+        });
         trim_buffer(&mut self.key_queue.as_mut());
     }
 
@@ -117,15 +121,6 @@ impl Keyboard {
         self.char_queue.push(char::from_u32(char_code).unwrap());
         trim_buffer(&mut self.char_queue.as_mut());
     }
-
-    pub fn key_queue_is_empty(&self) -> bool {
-        return self.key_queue.is_empty();
-    }
-
-    pub fn char_queue_is_empty(&self) -> bool {
-        return self.char_queue.is_empty();
-    }
-
 }
 
 fn trim_buffer<T>(buffer: &mut Vec<T>) {
