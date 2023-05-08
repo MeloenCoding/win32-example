@@ -14,13 +14,13 @@ use windows::{
         UI::{
             Input::KeyboardAndMouse::{ReleaseCapture, SetCapture},
             WindowsAndMessaging::{
-                CreateWindowExA, DefWindowProcA, DestroyWindow, DispatchMessageA, GetMessageA,
-                LoadCursorW, MessageBoxExA, PeekMessageA, PostQuitMessage, RegisterClassExA,
-                ShowWindow, TranslateMessage, HICON, IDC_ARROW, MESSAGEBOX_RESULT,
-                MESSAGEBOX_STYLE, MSG, PM_REMOVE, WM_CHAR, WM_CLOSE, WM_DESTROY, WM_KEYDOWN,
-                WM_KEYUP, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
-                WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN,
-                WM_SYSKEYUP, WNDCLASSEXA, WNDCLASS_STYLES, WS_CAPTION, WS_MINIMIZEBOX, WS_SYSMENU,
+                CreateWindowExA, DefWindowProcA, DestroyWindow, DispatchMessageA, LoadCursorW,
+                MessageBoxExA, PeekMessageA, PostQuitMessage, RegisterClassExA, ShowWindow,
+                TranslateMessage, HICON, IDC_ARROW, MESSAGEBOX_RESULT, MESSAGEBOX_STYLE, MSG,
+                PM_REMOVE, WM_CHAR, WM_CLOSE, WM_DESTROY, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS,
+                WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE,
+                WM_MOUSEWHEEL, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+                WNDCLASSEXA, WNDCLASS_STYLES, WS_CAPTION, WS_MINIMIZEBOX, WS_SYSMENU,
             },
         },
     },
@@ -109,12 +109,13 @@ pub fn create_message_box(
 impl Window<'_> {
     /// Create a window instance
     pub fn new(
-        class_name: PCSTR,
+        window_name: &str,
         style: WNDCLASS_STYLES,
         window_width: i16,
         window_height: i16,
     ) -> Window<'static> {
-        let class_name: PCSTR = class_name; // ID of the program
+        let base_details: String = window_name.to_string();
+        let class_name: PCSTR = PCSTR::from_raw(base_details.as_ptr());
 
         /*
             hInstance is the handle to an instance or handle to a module. The
@@ -232,67 +233,6 @@ impl Window<'_> {
                 windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD(1),
             );
         };
-    }
-
-    /**
-        A function to handle all of the Window Events.
-        # Example
-        ```rust
-        let mut input_str: String = "".to_string();
-        loop { // has to be in a loop because you want to handle more then one event
-            match window.handle_message() {
-                Err((msg, result)) => {
-                    // result =  (0 = there is an exit without an error) |
-                    //           ( -1 = there is an exit with an error)
-
-                    // In this example i'll create an WindowError wich creates an MessageBox with
-                    // the error_desc. The error code and the location of the error.
-                    if result == -1 {
-                        let (error_desc, error_code) = window.get_error_desc();
-                        window::error::WindowError::new(&error_desc, Some(error_code as i32), loc!());
-                    }
-
-                    break;
-                },
-                Ok(_msg) => {
-                    if let Some(ch) = window.keyboard.read_char() {
-                        input_str.push(ch);
-                    }
-                    if window.keyboard.key_is_pressed_clear(VK_RETURN.0) {
-                        println!("{:?}", input_str);
-                        input_str = "".to_string();
-                    }
-                },
-            }
-        }
-
-        // print the exit codes on a exit without errors
-        window.get_exit_codes();
-    */
-    pub fn handle_message(&mut self) -> Result<MSG, (MSG, i32)> {
-        /*
-            For info about this i really recommend the video of ChilliTomatoNoodle (https://youtu.be/Fx5bGZ3B_CI?t=152)
-            to see how this function works. He explains it better then i ever could. It is in C++ tho.
-              ---
-            This function needs to be called in a loop in 'main.rs'. It reads the message from the message queue
-            and if it returns 0 (exit without an error) or -1 (exit with an error). If returns either of those,
-            signal to 'main.rs' to terminate the loop.
-
-            Else translate and dispatch the message. Like i said in the beginning, watch the video, it really
-            makes things clear.
-        */
-
-        let get_message_result: BOOL = unsafe { GetMessageA(&mut self.msg_buffer, None, 0, 0) };
-
-        if !(get_message_result.0 > 0) {
-            self.last_result = get_message_result;
-            return Err((self.msg_buffer.to_owned(), get_message_result.0));
-        }
-
-        unsafe { TranslateMessage(&mut self.msg_buffer) };
-        unsafe { DispatchMessageA(&mut self.msg_buffer) };
-
-        Ok(self.msg_buffer.to_owned())
     }
 
     pub fn handle_messages(&mut self) -> Option<usize> {

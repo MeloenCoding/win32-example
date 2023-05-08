@@ -147,7 +147,7 @@ impl Mouse {
         self.wheel_pressed = false;
 
         self.event_queue.push(MouseEvent {
-            mouse_state: MouseState::WheelUp,
+            mouse_state: MouseState::WHeelRelease,
             left_pressed: self.left_pressed,
             right_pressed: self.right_pressed,
             x: self.x,
