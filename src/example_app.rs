@@ -40,7 +40,7 @@ impl ExampleApp<'_> {
 
         let elapsed_time: windows::core::PCSTR = windows::core::PCSTR::from_raw(
             format!(
-                "{},{}s",
+                "{},{}s\0",
                 time_alive.as_secs(),
                 time_alive.as_millis() % 1000
             )
@@ -49,7 +49,7 @@ impl ExampleApp<'_> {
         unsafe {
             windows::Win32::UI::WindowsAndMessaging::SetWindowTextA(self.window.hwnd, elapsed_time)
         };
-
+        std::thread::sleep(std::time::Duration::from_millis(1));
         // App logic
         if let Some(ch) = self.window.keyboard.read_char() {
             self.input_buffer.push(ch);
